@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-sdlc-frontend"
+version = "0.1.0"
+description = "Streamlit UI for AI Software Delivery Team orchestration"
+requires-python = ">=3.10"
+authors = [
+    {name = "AI Software Delivery Team"}
+]
+
+dependencies = [
+    "requests",
+    "streamlit",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/ai-sdlc"
+Repository = "https://github.com/yourusername/ai-sdlc"

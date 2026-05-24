@@ -33,15 +33,31 @@ def test_workflow_waits_for_human_approval():
 def test_approved_workflow_reaches_deployment_plan():
     state = workflow_graph.invoke(_initial_state())
     state["approved"] = True
+    state["status"] = "awaiting_approval"
     approved_state = workflow_graph.invoke(state)
 
     assert approved_state["status"] == "ready_for_deployment"
-    assert approved_state["deployment_plan"]["runtime"] == "Deploy FastAPI on Cloud Run."
+    assert approved_state["deployment_plan"]["runtime"] == "Manual deployment review required."
+
+
+def test_repeated_approval_stays_deployment_ready():
+    state = workflow_graph.invoke(_initial_state())
+    state["approved"] = True
+    state["status"] = "awaiting_approval"
+    approved_state = workflow_graph.invoke(state)
+
+    approved_state["approved"] = True
+    approved_state["status"] = "awaiting_approval"
+    repeated_state = workflow_graph.invoke(approved_state)
+
+    assert repeated_state["status"] == "ready_for_deployment"
+    assert repeated_state["iteration_count"] == 1
 
 
 def test_rejected_workflow_loops_to_developer():
     state = workflow_graph.invoke(_initial_state())
     state["approved"] = False
+    state["status"] = "awaiting_approval"
     state["human_feedback"] = "Use typed schemas."
     reworked_state = workflow_graph.invoke(state)
 

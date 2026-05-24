@@ -1,0 +1,18 @@
+# Simple local run script for Windows PowerShell
+
+Write-Host "Starting local E2E test..."
+Write-Host ""
+Write-Host "IMPORTANT: Run these commands in separate PowerShell terminals:"
+Write-Host ""
+Write-Host "=== Terminal 1 - Backend ==="
+Write-Host "cd backend/src"
+Write-Host "uvicorn ai_sdlc.api:app --reload --host 0.0.0.0 --port 8000"
+Write-Host ""
+Write-Host "=== Terminal 2 - Frontend ==="
+Write-Host "streamlit run frontend/streamlit_app.py --server.port 8501"
+Write-Host ""
+Write-Host "Then:"
+Write-Host "Frontend: http://localhost:8501"
+Write-Host "Backend API: http://localhost:8000"
+Write-Host "Backend Docs: http://localhost:8000/docs"
+Write-Host ""

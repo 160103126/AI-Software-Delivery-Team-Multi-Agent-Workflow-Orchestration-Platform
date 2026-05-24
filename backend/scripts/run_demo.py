@@ -8,9 +8,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ai_sdlc.graph import workflow_graph  # noqa: E402
+from ai_sdlc.logging_config import configure_logging  # noqa: E402
 
 
 def main() -> None:
+    configure_logging()
     workflow_id = str(uuid4())
     state = workflow_graph.invoke(
         {
