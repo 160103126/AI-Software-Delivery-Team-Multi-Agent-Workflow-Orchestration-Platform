@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI SDLC Orchestrator</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="logo"></div>
+                <h1>AI SDLC</h1>
+            </div>
+            
+            <div class="nav-section">
+                <h3>New Workflow</h3>
+                <form id="workflow-form">
+                    <div class="form-group">
+                        <label for="prompt">Feature Description</label>
+                        <textarea id="prompt" rows="5" placeholder="e.g. Build a REST API for a task manager with PostgreSQL and Redis caching..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn-primary" id="start-btn">Start Orchestration</button>
+                </form>
+            </div>
+
+            <div class="nav-section" id="active-workflow-panel" style="display: none;">
+                <h3>Active Workflow</h3>
+                <div class="status-indicator">
+                    <span class="pulse" id="status-pulse"></span>
+                    <span id="workflow-status">Initializing...</span>
+                </div>
+                <div class="actions">
+                    <button id="download-btn" class="btn-secondary" style="display: none;">Download Codebase</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="breadcrumb">Workspace / <span id="current-workflow-id">None</span></div>
+                <div class="theme-toggle">Dark Mode</div>
+            </header>
+
+            <div class="terminal-container">
+                <div class="terminal-header">
+                    <div class="window-controls">
+                        <span></span><span></span><span></span>
+                    </div>
+                    <div class="terminal-title">Agent Execution Logs (LangGraph)</div>
+                </div>
+                <div class="terminal-body" id="terminal-output">
+                    <div class="log system">System ready. Waiting for workflow request...</div>
+                </div>
+            </div>
+
+            <!-- Approval Modal -->
+            <div class="modal-overlay" id="approval-modal">
+                <div class="modal">
+                    <h2>Human Review Required</h2>
+                    <p>The agents have completed the implementation and tests. Please review the summary below:</p>
+                    
+                    <div class="review-summary" id="review-summary-content">
+                        Loading summary...
+                    </div>
+
+                    <div class="form-group">
+                        <label for="review-feedback">Feedback (Optional if Approving)</label>
+                        <textarea id="review-feedback" rows="3" placeholder="Provide feedback for rework, or leave empty if approving."></textarea>
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button class="btn-danger" id="reject-btn">Reject & Rework</button>
+                        <button class="btn-success" id="approve-btn">Approve & Deploy</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

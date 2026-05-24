@@ -13,6 +13,7 @@ COPY pyproject.toml .
 
 # 2. FIXED: Copy the src directory BEFORE running pip install
 COPY src ./src
+COPY frontend ./frontend
 
 # 3. Now pip install will succeed because the 'src' directory exists
 RUN pip install --no-cache-dir -e .

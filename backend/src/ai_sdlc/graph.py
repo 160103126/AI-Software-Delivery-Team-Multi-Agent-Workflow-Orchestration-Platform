@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+import os
+
+from dotenv import load_dotenv
 from langgraph.graph import END, START, StateGraph
 
 from .agents import (
@@ -13,8 +17,14 @@ from .agents import (
     reviewer_agent,
     scrum_master_agent,
     security_agent,
+    archiver_node,
 )
 from .state import WorkflowState
+
+load_dotenv()
+load_dotenv(".ENV")
+
+logger = logging.getLogger(__name__)
 
 
 def entry_node(state: WorkflowState) -> dict:
@@ -35,7 +45,40 @@ def route_after_human_review(state: WorkflowState) -> str:
     return "waiting"
 
 
-def build_graph():
+def _create_checkpointer():
+    """Create a LangGraph checkpointer.
+
+    Uses RedisSaver when REDIS_URL is set (requires Redis 8.0+ or Redis Stack
+    with RedisJSON and RediSearch modules).  Falls back to an in-memory
+    MemorySaver when Redis is unavailable, which is fine for local development
+    but state will be lost on server restart.
+    """
+    redis_url = os.getenv("REDIS_URL")
+    if redis_url:
+        try:
+            from langgraph.checkpoint.redis import RedisSaver
+
+            checkpointer = RedisSaver.from_conn_string(redis_url)
+            checkpointer.setup()
+            logger.info("LangGraph checkpointer: RedisSaver (url=%s)", redis_url.split("@")[-1])
+            return checkpointer
+        except Exception as exc:
+            logger.warning("Failed to create RedisSaver, falling back to MemorySaver: %s", exc)
+
+    from langgraph.checkpoint.memory import MemorySaver
+
+    logger.info("LangGraph checkpointer: MemorySaver (in-memory, state lost on restart)")
+    return MemorySaver()
+
+
+def route_after_aggregate(state: WorkflowState) -> str:
+    """Route after aggregate: auto-rework or proceed to human review."""
+    if state.get("status") == "auto_rework":
+        return "developer"
+    return "human_review"
+
+
+def build_graph(checkpointer=None):
     graph = StateGraph(WorkflowState)
 
     graph.add_node("entry", entry_node)
@@ -49,6 +92,7 @@ def build_graph():
     graph.add_node("aggregate", aggregate_agent)
     graph.add_node("human_review", human_review_node)
     graph.add_node("devops", devops_agent)
+    graph.add_node("archiver", archiver_node)
 
     graph.add_edge(START, "entry")
     graph.add_conditional_edges(
@@ -70,7 +114,16 @@ def build_graph():
     graph.add_edge("qa", "aggregate")
     graph.add_edge("security", "aggregate")
     graph.add_edge("reviewer", "aggregate")
-    graph.add_edge("aggregate", "human_review")
+
+    # After aggregate: auto-rework (back to developer) or human review
+    graph.add_conditional_edges(
+        "aggregate",
+        route_after_aggregate,
+        {
+            "developer": "developer",
+            "human_review": "human_review",
+        },
+    )
 
     graph.add_conditional_edges(
         "human_review",
@@ -81,9 +134,10 @@ def build_graph():
             "waiting": END,
         },
     )
-    graph.add_edge("devops", END)
+    graph.add_edge("devops", "archiver")
+    graph.add_edge("archiver", END)
 
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)
 
 
-workflow_graph = build_graph()
+workflow_graph = build_graph(checkpointer=_create_checkpointer())

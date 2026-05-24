@@ -5,11 +5,13 @@ import json
 import logging
 import os
 from functools import lru_cache
-from typing import Any
+from typing import Any, List
 
 import redis
 from dotenv import load_dotenv
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.prebuilt import create_react_agent
 from pydantic import BaseModel, ValidationError
 
 load_dotenv()
@@ -158,3 +160,38 @@ def invoke_json_model(system_prompt: str, user_prompt: str, schema: type[BaseMod
     except (json.JSONDecodeError, ValidationError) as exc:
         logger.warning("Gemini returned invalid structured output for schema=%s: %s", schema.__name__, exc)
         raise ValueError(f"Gemini returned invalid structured output: {exc}") from exc
+
+
+def invoke_agent_with_tools(system_prompt: str, user_prompt: str, tools: List[Any]) -> str:
+    """Run a ReAct loop using the provided tools and prompts."""
+    if not llm_enabled():
+        raise RuntimeError(
+            "LLM is disabled or provider credentials are not configured. "
+            "For Vertex mode, set GOOGLE_CLOUD_PROJECT and authenticate with ADC."
+        )
+
+    logger.info(f"Creating ReAct agent with {len(tools)} tools using provider={_provider()}")
+    llm = get_gemini_model()
+    
+    try:
+        agent = create_react_agent(llm, tools=tools, prompt=system_prompt)
+        # Use invoke. The state has a 'messages' key.
+        response = agent.invoke(
+            {"messages": [HumanMessage(content=user_prompt)]},
+            {"recursion_limit": 30}  # Increased limit to allow more tool iterations for debugging
+        )
+        
+        # The final answer is the content of the last message
+        content = response["messages"][-1].content
+        if isinstance(content, list):
+            texts = []
+            for item in content:
+                if isinstance(item, str):
+                    texts.append(item)
+                elif isinstance(item, dict) and "text" in item:
+                    texts.append(item["text"])
+            return "\n".join(texts)
+        return str(content)
+    except Exception as e:
+        logger.exception("ReAct agent execution failed")
+        raise ValueError(f"Agent execution failed: {e}") from e

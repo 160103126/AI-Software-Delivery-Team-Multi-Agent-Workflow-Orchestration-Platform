@@ -23,5 +23,10 @@ class WorkflowState(TypedDict, total=False):
     human_feedback: str
     iteration_count: int
     max_iterations: int
+    auto_rework_count: int
+    max_auto_reworks: int
     status: str
+    workspace_dir: str
+    project_archive_base64: Optional[str]
     execution_log: Annotated[List[str], add]
+

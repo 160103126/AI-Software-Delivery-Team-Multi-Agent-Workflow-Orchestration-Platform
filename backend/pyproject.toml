@@ -18,17 +18,21 @@ dependencies = [
     "langchain",
     "langchain-google-genai",
     "langgraph",
+    "langgraph-checkpoint-redis",
     "pydantic",
     "python-dotenv",
     "google-cloud-firestore>=2.14.0",
     "redis>=5.0.0",
     "google-cloud-logging>=3.8.0",
+    "aiofiles>=23.2.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
     "pytest-cov",
+    "bandit",
+    "pip-audit",
 ]
 
 [project.urls]
