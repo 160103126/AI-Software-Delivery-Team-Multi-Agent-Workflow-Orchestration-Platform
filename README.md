@@ -1,118 +1,79 @@
 # AI Software Delivery Team
 
-A LangGraph + FastAPI scaffold for an autonomous SDLC workflow. The graph models a small software team: Product Owner, Architect, Scrum Master, Developer, QA, Security, Reviewer, Human Approval, and DevOps.
+A multi-agent platform that automates the entire software delivery lifecycle using AI. 
 
-Product Owner and Architect can use Gemini through LangChain. The app defaults to Vertex AI mode with `gemini-2.5-flash-lite`, and falls back to deterministic structured outputs if the LLM is disabled, credentials are missing, or the model returns invalid JSON.
+One natural-language prompt → 8 specialized AI agents take over:
+1. 🧠 **Product Owner** → analyzes requirements
+2. 🏗️ **Architect** → designs the system
+3. 📋 **Scrum Master** → plans sprint tasks
+4. 👨‍💻 **Developer** → writes real, executable code
+5. 🧪 **QA Engineer** → writes & runs pytest tests
+6. 🔒 **Security Agent** → runs bandit SAST + pip-audit SCA
+7. 📝 **Code Reviewer** → reviews for maintainability
+8. ☁️ **DevOps** → generates deployment plan
+
+*(Plus an automated Auto-Rework loop and a Human Approval gate!)*
+
+The execution agents (Developer, QA, Security) use the **ReAct (Reasoning and Acting)** loop. They don't just generate text—they are equipped with a sandbox and tools to read/write files and execute terminal commands. If tests fail or vulnerabilities are found, an Aggregator node intercepts the terminal traces and feeds them back to the Developer agent to automatically fix the code.
+
+## Tech Stack
+* **Orchestration**: LangGraph (state machine with parallel fan-out)
+* **LLM**: LangChain + Gemini 2.5 Pro (via Google Vertex AI)
+* **Backend**: FastAPI + Python 3.10
+* **Frontend**: Vanilla JS + HTML/CSS (Server-Sent Events for real-time terminal streaming)
+* **State & Caching**: Redis (LLM caching & checkpointing) + Firestore (persistent storage)
+* **Deployment**: GCP Cloud Run
+* **Observability & Evaluation**: LangSmith
 
 ## Run Locally
 
+You must have Google Cloud SDK installed and authenticated to use Vertex AI.
+
 ```powershell
+# 1. Authenticate with GCP
+gcloud auth application-default login
+gcloud config set project your-gcp-project-id
+
+# 2. Install dependencies
 venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+
+# 3. Start the server (serves both API and Frontend)
 venv\Scripts\python.exe -m uvicorn ai_sdlc.api:app --app-dir backend\src --reload
 ```
 
-Open:
+Open your browser to: **http://127.0.0.1:8000**
 
-```text
-http://127.0.0.1:8000/docs
-```
+## Cloud Run Deployment
 
-Run the Streamlit UI in a second terminal:
+The project includes a fully automated PowerShell script to deploy the backend and frontend to Google Cloud Run, backed by a managed Redis instance and Firestore.
 
 ```powershell
-venv\Scripts\python.exe -m pip install -r frontend\requirements.txt
-venv\Scripts\python.exe -m streamlit run frontend\streamlit_app.py
+.\scripts\deploy-cloud-run.ps1 -ProjectId your-gcp-project-id -Region us-central1
 ```
 
-Open:
+## Offline Evaluation (LangSmith)
 
-```text
-http://127.0.0.1:8501
-```
+We use a deterministic, zero-LLM-judge evaluation pipeline to measure agent reliability against a "Golden Dataset" of 8 rigorous software engineering prompts (e.g., JWT Auth, Sliding Window Rate Limiter, Async Job Queue). 
 
-## Docker Builds (Separate Containers)
-
-Backend:
+To run the offline evaluation and push scores to your LangSmith dashboard:
 
 ```powershell
-docker build -t ai-sdlc-backend -f backend\Dockerfile backend
-docker run --rm -p 8000:8080 ai-sdlc-backend
-```
-
-Frontend:
-
-```powershell
-docker build -t ai-sdlc-frontend -f frontend\Dockerfile frontend
-docker run --rm -p 8501:8080 -e API_BASE_URL=http://host.docker.internal:8000 ai-sdlc-frontend
-```
-
-## Vertex AI Dry Run
-
-Enable the Vertex AI API in your GCP project, make sure billing is attached, then authenticate locally:
-
-```powershell
-gcloud auth application-default login
-gcloud config set project your-gcp-project-id
-```
-
-Use this `.ENV` or `.env` shape:
-
-```text
-AI_SDLC_USE_LLM=true
-AI_SDLC_LLM_PROVIDER=vertex
-GOOGLE_CLOUD_PROJECT=your-gcp-project-id
-GOOGLE_CLOUD_LOCATION=global
-GEMINI_MODEL=gemini-2.5-flash-lite
-GEMINI_TEMPERATURE=0.2
-```
-
-To force deterministic local mode:
-
-```powershell
-$env:AI_SDLC_USE_LLM="false"
-```
-
-## Try The Workflow
-
-Create a workflow:
-
-```powershell
-Invoke-RestMethod -Method Post http://127.0.0.1:8000/workflows -ContentType "application/json" -Body '{"user_request":"Build login API with JWT authentication"}'
-```
-
-Approve or reject:
-
-```powershell
-Invoke-RestMethod -Method Post http://127.0.0.1:8000/workflows/<workflow_id>/approval -ContentType "application/json" -Body '{"approved":true,"comment":"Looks good"}'
-```
-
-Run a CLI demo:
-
-```powershell
-venv\Scripts\python.exe backend\scripts\run_demo.py
+venv\Scripts\python.exe backend\scripts\run_evaluation.py --experiment "v2.0-latest"
 ```
 
 ## Project Layout
 
 ```text
-frontend/
-  streamlit_app.py
-  Dockerfile
-  requirements.txt
+frontend/           # Deprecated Streamlit UI (kept for reference)
+docs/               # Architecture diagrams, issue logs, and project breakdowns
+scripts/            # GCP Deployment scripts
 backend/
   Dockerfile
+  pyproject.toml
   requirements.txt
   pytest.ini
-  src/ai_sdlc/
-  tests/
-  scripts/
+  frontend/         # Active HTML/JS/CSS UI served by FastAPI
+  scripts/          # Evaluation and demo scripts
+  src/ai_sdlc/      # Main LangGraph and Agent implementation
+  tests/            # Platform unit tests
 ```
-
-## Next Upgrades
-
-- Upgrade Scrum Master and Developer agents to structured Gemini outputs.
-- Add PostgreSQL-backed workflow persistence and LangGraph checkpointing.
-- Add Redis for short-term memory, queues, and pub/sub.
-- Add SSE or WebSocket streaming for live agent progress.
-- Add Bandit/Semgrep/Safety tool wrappers for the Security Agent.
-- Add Cloud Run, Cloud SQL, Secret Manager, and Cloud Logging deployment assets.
