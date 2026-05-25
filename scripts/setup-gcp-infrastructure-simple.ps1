@@ -19,6 +19,7 @@ gcloud services enable redis.googleapis.com --project=$ProjectId
 gcloud services enable run.googleapis.com --project=$ProjectId
 gcloud services enable logging.googleapis.com --project=$ProjectId
 gcloud services enable aiplatform.googleapis.com --project=$ProjectId
+gcloud services enable secretmanager.googleapis.com --project=$ProjectId
 
 Write-Host ""
 Write-Host "2. Creating Firestore database..."

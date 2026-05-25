@@ -33,6 +33,7 @@ dev = [
     "pytest-cov",
     "bandit",
     "pip-audit",
+    "langsmith>=0.1.0",
 ]
 
 [project.urls]

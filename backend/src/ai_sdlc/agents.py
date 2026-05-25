@@ -181,12 +181,16 @@ def developer_agent(state: WorkflowState) -> Dict[str, Any]:
             "you MUST address every finding in your revised implementation. "
             "When you are done writing the files, return a brief summary of what you implemented as your final answer."
         )
+        human_feedback = state.get("human_feedback", "").strip()
+        
         user_prompt = (
             "Implement this feature.\n\n"
             f"{ctx}\n\n"
             f"Agent feedback from QA/Security/Reviewer:\n{agent_fb}"
         )
-        
+        if human_feedback:
+            user_prompt += f"\n\nCRITICAL HUMAN FEEDBACK (You must address this):\n{human_feedback}"
+            
         generated_code_summary = invoke_agent_with_tools(system_prompt, user_prompt, tools)
         logger.info("Developer used ReAct loop successfully: workflow_id=%s", state.get("workflow_id"))
     except Exception as exc:
@@ -405,17 +409,31 @@ def devops_agent(state: WorkflowState) -> Dict[str, Any]:
 
 
 def archiver_node(state: WorkflowState) -> Dict[str, Any]:
-    """Zip the workspace and base64 encode it for state storage."""
+    """Zip the workspace and base64 encode it for state storage.
+    
+    Excludes .venv, __pycache__, and .pytest_cache from the archive
+    since the user only needs requirements.txt to recreate the environment.
+    """
     logger.info("Archiver started: workflow_id=%s", state.get("workflow_id"))
     workspace_dir = state.get("workspace_dir", "")
     
     if not workspace_dir or not os.path.exists(workspace_dir):
         return {"project_archive_base64": None, "execution_log": _log("Archiver (skipped - no workspace)")}
-        
+
+    EXCLUDE_DIRS = {".venv", "__pycache__", ".pytest_cache"}
+
     try:
         # Create a temp file for the zip
         temp_zip = tempfile.mktemp(suffix=".zip")
-        shutil.make_archive(temp_zip.replace('.zip', ''), 'zip', workspace_dir)
+        import zipfile
+        with zipfile.ZipFile(temp_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+            for root, dirs, files in os.walk(workspace_dir):
+                # Skip excluded directories in-place so os.walk doesn't descend into them
+                dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, workspace_dir)
+                    zf.write(file_path, arcname)
         
         with open(temp_zip, "rb") as f:
             b64_data = base64.b64encode(f.read()).decode("utf-8")

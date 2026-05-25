@@ -43,6 +43,7 @@ class WorkflowStore:
             state_copy = dict(state)
             state_copy["_updated_at"] = datetime.utcnow()
             state_copy["_workflow_id"] = workflow_id
+            state_copy.pop("project_archive_base64", None)  # CRITICAL: Prevent 1MB Firestore limit crash
 
             # Convert non-serializable objects
             for key in list(state_copy.keys()):

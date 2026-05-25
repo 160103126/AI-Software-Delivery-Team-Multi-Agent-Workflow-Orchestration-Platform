@@ -118,7 +118,11 @@ def _stream_workflow(initial_state: WorkflowState | None, config: dict) -> Itera
                     final_state = _get_checkpoint_state(workflow_id) or state
                     workflow_store.save(workflow_id, final_state)
                     logger.info("Streaming workflow completed: workflow_id=%s status=%s", workflow_id, final_state.get("status"))
-                    yield _sse("workflow_completed", {"workflow_id": workflow_id, "status": final_state.get("status"), "state": final_state})
+                    
+                    # Prevent sending 11MB zip file over SSE, which freezes browser UI
+                    safe_state = deepcopy(final_state)
+                    safe_state.pop("project_archive_base64", None)
+                    yield _sse("workflow_completed", {"workflow_id": workflow_id, "status": safe_state.get("status"), "state": safe_state})
                     break
                     
                 elif msg_type == "error":
@@ -130,15 +134,22 @@ def _stream_workflow(initial_state: WorkflowState | None, config: dict) -> Itera
                         _merge_delta(state, delta)
                         if node_name == "entry":
                             continue
-                        yield _sse(
-                            "agent_update",
-                            {
-                                "workflow_id": workflow_id,
-                                "node": node_name,
-                                "status": state.get("status"),
-                                "delta": delta or {},
-                            },
-                        )
+                            
+                        payload = {
+                            "workflow_id": workflow_id,
+                            "node": node_name,
+                            "status": state.get("status"),
+                            "delta": delta or {},
+                        }
+                        
+                        # Re-inject specific state fields required by the frontend modal
+                        if state.get("status") == "awaiting_approval":
+                            payload["state"] = {
+                                "generated_code": state.get("generated_code"),
+                                "test_cases": state.get("test_cases")
+                            }
+                            
+                        yield _sse("agent_update", payload)
             except queue.Empty:
                 # Send a keep-alive ping to prevent browser timeout and update UI
                 yield _sse("ping", {"message": "Agent is thinking..."})

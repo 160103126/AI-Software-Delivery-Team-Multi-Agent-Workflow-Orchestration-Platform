@@ -23,65 +23,77 @@ document.addEventListener('DOMContentLoaded', () => {
     async function streamResponse(response) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");
-        
+        let buffer = '';  // Buffer for incomplete chunks across reads
+
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n');
-            
-            for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    const dataStr = line.replace('data: ', '').trim();
-                    if (!dataStr) continue;
-                    
-                    try {
-                        const eventData = JSON.parse(dataStr);
-                        
-                        // Handle ping messages
-                        if (eventData.message) {
-                            appendLog(eventData.message, 'system');
-                            continue; // skip further processing for this line
-                        }
 
-                        // Look for new log messages in execution_log (it might be in delta or state depending on the event type)
-                        let logs = null;
-                        if (eventData.delta && eventData.delta.execution_log) {
-                            logs = eventData.delta.execution_log;
-                        } else if (eventData.state && eventData.state.execution_log) {
-                            logs = eventData.state.execution_log;
-                        }
-                        
-                        if (logs && logs.length > 0) {
-                            // Only append the very last log to prevent duplicate spams in UI
-                            const latestLog = logs[logs.length - 1];
-                            appendLog(latestLog, 'agent');
-                        }
-                        
-                        // Set Workflow ID from stream
-                        if (eventData.workflow_id && !currentWorkflowId) {
-                            currentWorkflowId = eventData.workflow_id;
-                            currentWorkflowSpan.textContent = currentWorkflowId;
-                            activeWorkflowPanel.style.display = 'block';
-                            downloadBtn.style.display = 'none';
-                            statusPulse.style.backgroundColor = 'var(--accent)';
-                        }
+            buffer += decoder.decode(value, { stream: true });
 
-                        // Handle State changes
-                        if (eventData.status) {
-                            workflowStatus.textContent = eventData.status;
-                            
-                            if (eventData.status === 'awaiting_approval') {
-                                showApprovalModal(eventData.state || {});
-                            } else if (eventData.status === 'ready_for_deployment' || eventData.status === 'completed') {
-                                statusPulse.style.backgroundColor = 'var(--success)';
-                                downloadBtn.style.display = 'block';
-                            }
-                        }
-                    } catch (e) {
-                        console.error("Error parsing event:", e);
+            // SSE events are delimited by blank lines (\n\n).
+            // Split on them to get complete frames; the last element
+            // may be an incomplete frame that we keep in the buffer.
+            const frames = buffer.split('\n\n');
+            buffer = frames.pop();  // Keep the incomplete trailing frame
+
+            for (const frame of frames) {
+                if (!frame.trim()) continue;
+
+                // Extract all "data:" lines from this frame and join them
+                const dataLines = [];
+                for (const line of frame.split('\n')) {
+                    if (line.startsWith('data: ')) {
+                        dataLines.push(line.slice(6).trim());
                     }
+                }
+                if (dataLines.length === 0) continue;
+
+                try {
+                    const eventData = JSON.parse(dataLines.join('\n'));
+
+                    // Handle ping messages
+                    if (eventData.message) {
+                        appendLog(eventData.message, 'system');
+                        continue;
+                    }
+
+                    // Log every agent completion from this event
+                    let logs = null;
+                    if (eventData.delta && eventData.delta.execution_log) {
+                        logs = eventData.delta.execution_log;
+                    } else if (eventData.state && eventData.state.execution_log) {
+                        logs = eventData.state.execution_log;
+                    }
+
+                    if (logs && logs.length > 0) {
+                        for (const logEntry of logs) {
+                            appendLog(logEntry, 'agent');
+                        }
+                    }
+
+                    // Set Workflow ID from stream
+                    if (eventData.workflow_id && !currentWorkflowId) {
+                        currentWorkflowId = eventData.workflow_id;
+                        currentWorkflowSpan.textContent = currentWorkflowId;
+                        activeWorkflowPanel.style.display = 'block';
+                        downloadBtn.style.display = 'none';
+                        statusPulse.style.backgroundColor = 'var(--accent)';
+                    }
+
+                    // Handle State changes
+                    if (eventData.status) {
+                        workflowStatus.textContent = eventData.status;
+
+                        if (eventData.status === 'awaiting_approval') {
+                            showApprovalModal(eventData.state || {});
+                        } else if (eventData.status === 'ready_for_deployment' || eventData.status === 'completed') {
+                            statusPulse.style.backgroundColor = 'var(--success)';
+                            downloadBtn.style.display = 'block';
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error parsing event:", e);
                 }
             }
         }

@@ -27,17 +27,28 @@ gcloud projects add-iam-policy-binding "$ProjectId" `
   --role="roles/storage.admin" `
   --quiet
 
-# FIXED: Grant Artifact Registry push permissions to resolve repository upload errors
+# Grant Artifact Registry push permissions to resolve repository upload errors
 gcloud projects add-iam-policy-binding "$ProjectId" `
   --member="serviceAccount:$ServiceAccount" `
   --role="roles/artifactregistry.writer" `
+  --quiet
+
+# Grant Secret Manager access to read API keys
+gcloud projects add-iam-policy-binding "$ProjectId" `
+  --member="serviceAccount:$ServiceAccount" `
+  --role="roles/secretmanager.secretAccessor" `
   --quiet
 
 Write-Host "All infrastructure build permissions verified for: $ServiceAccount"
 Write-Host ""
 # -------------------------------------
 
-Write-Host "Deploying backend..."
+Write-Host "Fetching Redis instance IP..."
+$RedisIp = (gcloud redis instances describe ai-sdlc-redis --region=$Region --project=$ProjectId --format="value(host)").Trim()
+$RedisUrl = "redis://$($RedisIp):6379/0"
+Write-Host "Redis URL: $RedisUrl"
+
+Write-Host "Deploying Unified Backend + Frontend App..."
 # Uses single continuous string block to bypass PowerShell array sorting bugs
 gcloud run deploy $BackendService `
   --source backend/ `
@@ -47,34 +58,17 @@ gcloud run deploy $BackendService `
   --memory=1Gi `
   --cpu=1 `
   --timeout=600 `
-  --set-env-vars "AI_SDLC_USE_LLM=true,AI_SDLC_LLM_PROVIDER=vertex,GOOGLE_CLOUD_PROJECT=$ProjectId,GOOGLE_CLOUD_LOCATION=$Region,GEMINI_MODEL=gemini-2.5-flash-lite,GEMINI_TEMPERATURE=0.2,LOG_LEVEL=INFO"
+  --network=default `
+  --vpc-egress=private-ranges-only `
+  --set-env-vars "AI_SDLC_USE_LLM=true,AI_SDLC_LLM_PROVIDER=vertex,GOOGLE_CLOUD_PROJECT=$ProjectId,GOOGLE_CLOUD_LOCATION=$Region,GEMINI_MODEL=gemini-2.5-pro,GEMINI_TEMPERATURE=0.2,LOG_LEVEL=INFO,LANGCHAIN_TRACING_V2=true,LANGCHAIN_PROJECT=ai-sdlc,LANGCHAIN_ENDPOINT=https://api.smith.langchain.com,REDIS_URL=$RedisUrl" `
+  --set-secrets="LANGCHAIN_API_KEY=langchain-api-key:latest"
 
 Write-Host ""
-Write-Host "Backend deployed!"
+Write-Host "Deployment successful!"
 
 $BackendUrl = (gcloud run services describe $BackendService `
   --platform managed --region=$Region --project=$ProjectId --format='value(status.url)').Trim()
 
-Write-Host "Backend URL: $BackendUrl"
-Write-Host ""
-Write-Host "Deploying frontend..."
-
-gcloud run deploy $FrontendService `
-  --source frontend/ `
-  --region=$Region `
-  --project=$ProjectId `
-  --allow-unauthenticated `
-  --memory=512Mi `
-  --cpu=1 `
-  --timeout=600 `
-  --set-env-vars "API_BASE_URL=$BackendUrl,LOG_LEVEL=INFO"
-
-Write-Host ""
-Write-Host "Frontend deployed!"
-
-$FrontendUrl = (gcloud run services describe $FrontendService `
-  --platform managed --region=$Region --project=$ProjectId --format='value(status.url)').Trim()
-
-Write-Host "Frontend URL: $FrontendUrl"
+Write-Host "Application URL: $BackendUrl"
 Write-Host ""
 Write-Host "Deployment complete!"
