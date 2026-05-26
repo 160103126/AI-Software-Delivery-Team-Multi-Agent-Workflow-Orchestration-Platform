@@ -31,7 +31,7 @@ The only human intervention required is the **approval gate** — everything els
 
 ## 2. Multi-Agent Architecture
 
-The platform implements **10 specialised agents** plus 2 infrastructure nodes, organised into a directed acyclic graph (DAG) with feedback loops:
+The platform implements **8 specialised AI agents** plus 2 deterministic infrastructure nodes (and 1 human approval gate), organised into a directed acyclic graph (DAG) with feedback loops:
 
 ### Agent Roster
 
